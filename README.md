@@ -3,7 +3,7 @@
 > [!IMPORTANT]
 > **This repository ([karel-brinda/sshash-bigreedy-ms](https://github.com/karel-brinda/sshash-bigreedy-ms))
 > is a fork of [SSHash](https://github.com/jermp/sshash), extended to natively index
-> [masked superstrings](https://doi.org/10.1109/DCC58796.2024.00009) computed by BiGreedy, as
+> [masked superstrings](https://doi.org/10.1101/2023.02.01.526717) computed by BiGreedy, as
 > output by [KmerCamel](https://github.com/ondrejsladky/kmercamel).**
 >
 > Differences from the base SSHash:
