@@ -1,3 +1,48 @@
+# SSHash-BiGreedy-MS — SSHash for BiGreedy masked superstrings
+
+> [!IMPORTANT]
+> **This repository ([karel-brinda/sshash-bigreedy-ms](https://github.com/karel-brinda/sshash-bigreedy-ms))
+> is a fork of [SSHash](https://github.com/jermp/sshash), extended to natively index
+> [masked superstrings](https://doi.org/10.1109/DCC58796.2024.00009) computed by BiGreedy, as
+> output by [KmerCamel](https://github.com/ondrejsladky/kmercamel).**
+>
+> Differences from the base SSHash:
+>
+> * **New input format.** `--masked-superstring` indexes one KmerCamel-style masked superstring:
+>   a single FASTA record with one unwrapped sequence over `ACGTacgt`, where an uppercase base
+>   marks the start of a represented k-mer and a lowercase base an unrepresented one. Normal
+>   `kmercamel compute` output is directly usable:
+>
+>       kmercamel compute -k 31 -o out.msfa input.fa
+>       ./sshash build -i out.msfa -k 31 -m 16 --masked-superstring --check -o out.sshash
+>
+>   Only the represented k-mers are indexed. The superstring is stored once, and the maximal
+>   uppercase runs — the embedded maximal simplitigs — play the role of SSHash's strings, so the
+>   full dictionary interface is preserved: lookup with unique k-mer ids, access, iteration,
+>   streaming and navigational queries. Membership is content-based: an unrepresented
+>   (lowercase-start) occurrence of a k-mer that is represented elsewhere still answers positive.
+> * **Plain SPSS inputs** (unitigs, simplitigs, eulertigs; one sequence per line, as in the base
+>   SSHash) are indexed exactly as upstream, as the degenerate case of the same representation.
+> * **Index files are not interchangeable with the base SSHash**, in either direction: this fork
+>   uses a different internal offsets layout (`interval_offsets`).
+
+> [!WARNING]
+> **The mask must be min-one: every represented k-mer must have exactly one uppercase (ON)
+> occurrence in the superstring.** This is what makes the k-mer ↔ id bijection of the dictionary
+> well defined. The default output of `kmercamel compute` is min-one. Masks that mark a k-mer
+> more than once — e.g., max-one masks (`kmercamel maskopt -t maxone`), or a concatenation of
+> masked superstrings sharing k-mers — are **not supported and not detected during construction**:
+> they can silently corrupt k-mer ids or make construction fail. When the mask provenance is
+> uncertain, always pass `--check`, which verifies the id bijection and fails on any
+> non-min-one mask.
+>
+> Further restrictions of `--masked-superstring`: `--weighted` is not supported, and the input
+> must be a single unwrapped record (no multi-FASTA, no line wrapping).
+
+---
+
+*What follows is the original SSHash documentation.*
+
 [![Build](https://github.com/jermp/sshash/actions/workflows/build.yml/badge.svg)](https://github.com/jermp/sshash/actions/workflows/build.yml)
 [![CodeQL](https://github.com/jermp/sshash/actions/workflows/codeql.yml/badge.svg)](https://github.com/jermp/sshash/actions/workflows/codeql.yml)
 [![install with bioconda](https://img.shields.io/conda/dn/bioconda/sshash.svg?style=flag&logo=anaconda&logoColor=lightgray&labelColor=rgb(40,47,56)&color=rgb(68,190,80)&label=Install%20with%20bioconda)](http://bioconda.github.io/recipes/sshash/README.html)
@@ -13,29 +58,6 @@
 
 **SSHash** is a compressed dictionary data structure for k-mers
 (strings of length k over the DNA alphabet {A,C,G,T}), based on **S**parse and **S**kew **Hash**ing.
-
-> ### This fork: SSHash over BiGreedy masked superstrings
->
-> This repository ([karel-brinda/sshash-bigreedy-ms](https://github.com/karel-brinda/sshash-bigreedy-ms))
-> extends [SSHash](https://github.com/jermp/sshash) with native support for
-> [masked superstrings](https://doi.org/10.1101/2023.02.01.526717) computed by BiGreedy, as output
-> by [KmerCamel](https://github.com/ondrejsladky/kmercamel): instead of a set of strings, the index
-> stores one single superstring whose represented k-mers are marked by a case mask (uppercase base =
-> represented k-mer start). The k-mer set is then indexed with the full SSHash dictionary interface
-> (lookup with unique k-mer ids, access, iteration, streaming and navigational queries), while
-> the strings component stores the superstring only once, with the maximal runs of represented
-> k-mers (the embedded maximal simplitigs) acting as SSHash's strings.
->
-> Build an index directly from KmerCamel output (`kmercamel compute -k 31 -o out.msfa input.fa`):
->
->     ./sshash build -i out.msfa -k 31 -m 16 --masked-superstring --check -o out.sshash
->
-> The input must be a single unwrapped FASTA record with a **min-one** mask (the default KmerCamel
-> output): each represented k-mer must have exactly one uppercase occurrence, which is what makes
-> the k-mer ↔ id bijection of the dictionary well defined. Masks marking a k-mer more than once
-> (e.g., max-one masks) are not supported. `--weighted` is not supported with
-> `--masked-superstring`. Plain SPSS inputs (unitigs, simplitigs, eulertigs) are indexed exactly as
-> in upstream SSHash, as the degenerate case of the same representation.
 
 **NEWS:** A Rust port of SSHash is available [here](https://github.com/COMBINE-lab/sshash-rs)!
 
