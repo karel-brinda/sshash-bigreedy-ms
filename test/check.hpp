@@ -220,6 +220,7 @@ bool check_correctness_kmer_iterator(Dict const& dict)  //
          ++t) {
         uint64_t start = t * chunk_size;
         uint64_t end = std::min(num_kmers, start + chunk_size);
+        if (start >= end) break;
         threads.emplace_back(worker, start, end, t);
     }
 
@@ -246,8 +247,7 @@ bool check_correctness_string_iterator(Dict const& dict) {
         std::string expected_kmer(k, 0);
 
         for (uint64_t string_id = start; string_id < end; ++string_id) {
-            auto [begin, _] = dict.string_offsets(string_id);
-            uint64_t from_kmer_id = begin - string_id * (dict.k() - 1);
+            uint64_t from_kmer_id = dict.strings_offsets().first_kmer_id(string_id, k);
             auto it = dict.at_string_id(string_id);
 
             while (it.has_next()) {

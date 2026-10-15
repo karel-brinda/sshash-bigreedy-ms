@@ -41,6 +41,11 @@ int build(int argc, char** argv) {
                "-g", false);
     parser.add("weighted", "Also store the weights in compressed format.", "--weighted", false,
                true);
+    parser.add("masked_superstring",
+               "Interpret the input as one KmerCamel-style masked superstring: a single FASTA "
+               "record with one unwrapped sequence, where uppercase bases mark represented kmer "
+               "starts (min-one mask). Only the represented kmers are indexed.",
+               "--masked-superstring", false, true);
     parser.add("check", "Check correctness after construction.", "--check", false, true);
     parser.add("verbose", "Verbose output during construction.", "--verbose", false, true);
 
@@ -57,6 +62,11 @@ int build(int argc, char** argv) {
     if (parser.parsed("seed")) build_config.seed = parser.get<uint64_t>("seed");
     if (parser.parsed("lambda")) build_config.lambda = parser.get<double>("lambda");
     build_config.weighted = parser.get<bool>("weighted");
+    build_config.masked_superstring = parser.get<bool>("masked_superstring");
+    if (build_config.masked_superstring and build_config.weighted) {
+        std::cerr << "--weighted is not supported with --masked-superstring" << std::endl;
+        return 1;
+    }
     build_config.verbose = parser.get<bool>("verbose");
     if (parser.parsed("tmp_dirname")) {
         build_config.tmp_dirname = parser.get<std::string>("tmp_dirname");
@@ -75,12 +85,19 @@ int build(int argc, char** argv) {
 
     bool check = parser.get<bool>("check");
     if (check) {
-        check_correctness_lookup_access(dict, input_filename);
-        check_correctness_navigational_kmer_query(dict, input_filename);
-        check_correctness_navigational_string_query(dict);
-        if (build_config.weighted) check_correctness_weights(dict, input_filename);
-        check_correctness_kmer_iterator(dict);
-        check_correctness_string_iterator(dict);
+        if (build_config.masked_superstring) {
+            check_correctness_lookup_access_masked_superstring(dict, input_filename);
+            check_correctness_navigational_string_query(dict);
+            check_correctness_kmer_iterator(dict);
+            check_correctness_string_iterator(dict);
+        } else {
+            check_correctness_lookup_access(dict, input_filename);
+            check_correctness_navigational_kmer_query(dict, input_filename);
+            check_correctness_navigational_string_query(dict);
+            if (build_config.weighted) check_correctness_weights(dict, input_filename);
+            check_correctness_kmer_iterator(dict);
+            check_correctness_string_iterator(dict);
+        }
     }
 
     if (parser.parsed("output_filename")) {

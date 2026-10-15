@@ -30,11 +30,13 @@ struct dictionary_builder  //
 
         total_time_musec = 0;
 
+        strings_offsets_builder.set_k(build_config.k);
+
         do_step("step 1 (encode strings)", [&]() {
             encode_strings(filename);
             d.m_num_kmers = num_kmers;
-            assert(strings_offsets_builder.size() >= 2);
-            d.m_num_strings = strings_offsets_builder.size() - 1;
+            assert(strings_offsets_builder.num_strings() >= 1);
+            d.m_num_strings = strings_offsets_builder.num_strings();
         });
 
         if (build_config.weighted) {
@@ -106,6 +108,7 @@ private:
 
     void encode_strings(std::string const& filename);
     void encode_strings(std::istream& is, const input_file_t fmt);
+    void encode_strings_masked_superstring(std::istream& is);
     void compute_minimizer_tuples();
     void build_sparse_and_skew_index(dictionary<Kmer, Offsets>& d);
 

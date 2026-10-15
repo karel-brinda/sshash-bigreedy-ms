@@ -1,5 +1,8 @@
 #include "include/util.hpp"
+#include "include/masked_superstring.hpp"
 #include "external/gz/zip_stream.hpp"
+
+#include <type_traits>
 
 #if defined(__AVX2__)
 #include <immintrin.h>
@@ -238,11 +241,100 @@ void dictionary_builder<Kmer, Offsets>::encode_strings(std::istream& is,
 }
 
 template <typename Kmer, typename Offsets>
+void dictionary_builder<Kmer, Offsets>::encode_strings_masked_superstring(std::istream& is)  //
+{
+    if constexpr (!std::is_same_v<Offsets, interval_offsets>) {
+        (void)is;
+        throw std::runtime_error(
+            "masked-superstring input requires the dictionary to use interval_offsets");
+    } else {
+        const uint64_t k = build_config.k;
+        const uint64_t m = build_config.m;
+        assert(k > 0 and k >= m);
+
+        if (build_config.weighted) {
+            throw std::runtime_error("--weighted is not supported with masked-superstring input");
+        }
+
+        std::string sequence = read_masked_superstring<Kmer>(is);
+        auto intervals = masked_superstring_intervals(sequence, k);
+
+        const uint64_t n = sequence.length();
+        const uint64_t num_sequences = intervals.size();
+        uint64_t max_len = 0;
+
+        strings_offsets_builder.reserve(num_sequences);
+        for (auto interval : intervals) {
+            assert(interval.end - interval.begin >= k);
+            strings_offsets_builder.push_interval(interval.begin, interval.end);
+            num_kmers += interval.end - interval.begin - k + 1;
+            max_len = std::max<uint64_t>(max_len, interval.end - interval.begin);
+        }
+
+        strings_builder.reserve(Kmer::bits_per_char * n + Kmer::uint_kmer_bits);
+        for (uint64_t i = 0; i != n; ++i) {
+            strings_builder.append_bits(Kmer::char_to_uint(sequence[i]), Kmer::bits_per_char);
+        }
+
+        /* Push a final sentinel (dummy) value to avoid bounds' checking in
+           kmer_iterator::fill_buff(). */
+        static_assert(Kmer::uint_kmer_bits % 64 == 0);
+        for (int dummy_bits = Kmer::uint_kmer_bits; dummy_bits; dummy_bits -= 64) {
+            strings_builder.append_bits(0, 64);
+        }
+
+        if (build_config.verbose) {
+            std::cout << "read masked superstring of " << n << " bases: " << num_sequences
+                      << " strings (maximal runs of represented kmer starts), " << num_kmers
+                      << " kmers" << std::endl;
+            std::cout << "num_kmers " << num_kmers << std::endl;
+        }
+
+        const uint64_t s = uint64_t(1) << Kmer::bits_per_char;
+        const uint64_t lower_bound_on_m = std::ceil(std::log(n) / std::log(s)) + 1;
+        if (build_config.verbose and m < lower_bound_on_m) {
+            std::cout << "\n--> WARNING: using minimizer length " << m
+                      << " but it should be at least ceil(log_" << s << "(" << n
+                      << "))+1 = " << lower_bound_on_m << '\n'
+                      << std::endl;
+        }
+
+        num_bits nb;
+        nb.per_absolute_offset = std::ceil(std::log2(n));
+        nb.per_relative_offset = std::ceil(std::log2(max_len - m + 1));
+        nb.per_string_id = std::ceil(std::log2(num_sequences));
+
+        if (build_config.verbose) {
+            std::cout << "max string length = " << max_len << std::endl;
+            std::cout << "num bits per_absolute_offset = " << nb.per_absolute_offset << std::endl;
+            std::cout << "num bits per_relative_offset = " << nb.per_relative_offset << std::endl;
+            std::cout << "num bits per_string_id = " << nb.per_string_id << std::endl;
+        }
+
+        if (nb.per_string_id + nb.per_relative_offset > 64) {
+            throw std::runtime_error("minimizer offset does not fit within 64 bits");
+        }
+
+        strings_offsets_builder.set_num_bits(nb);
+    }
+}
+
+template <typename Kmer, typename Offsets>
 void dictionary_builder<Kmer, Offsets>::encode_strings(std::string const& filename)  //
 {
     std::ifstream is(filename.c_str());
     if (!is.good()) throw std::runtime_error("error in opening the file '" + filename + "'");
     if (build_config.verbose) std::cout << "reading file '" << filename << "'..." << std::endl;
+    if (build_config.masked_superstring) {
+        if (util::ends_with(filename, ".gz")) {
+            zip_istream zis(is);
+            encode_strings_masked_superstring(zis);
+        } else {
+            encode_strings_masked_superstring(is);
+        }
+        is.close();
+        return;
+    }
     if (util::ends_with(filename, ".gz")) {
         zip_istream zis(is);
         if (util::ends_with(filename, ".cf_seg.gz")) {

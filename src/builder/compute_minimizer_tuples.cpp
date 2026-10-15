@@ -8,7 +8,7 @@ template <typename Kmer, typename Offsets>
 void dictionary_builder<Kmer, Offsets>::compute_minimizer_tuples()  //
 {
     const uint64_t num_threads = build_config.num_threads;
-    const uint64_t num_sequences = strings_offsets_builder.size() - 1;
+    const uint64_t num_sequences = strings_offsets_builder.num_strings();
     const uint64_t num_sequences_per_thread = (num_sequences + num_threads - 1) / num_threads;
     const uint64_t k = build_config.k;
     const uint64_t m = build_config.m;
@@ -48,8 +48,8 @@ void dictionary_builder<Kmer, Offsets>::compute_minimizer_tuples()  //
 
             for (uint64_t i = index_begin; i < index_end; ++i)  //
             {
-                const uint64_t begin = strings_offsets_builder[i];
-                const uint64_t end = strings_offsets_builder[i + 1];
+                const uint64_t begin = strings_offsets_builder.string_begin(i);
+                const uint64_t end = strings_offsets_builder.string_end(i);
                 const uint64_t sequence_len = end - begin;
                 assert(sequence_len >= k);
 

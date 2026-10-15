@@ -159,6 +159,7 @@ struct build_configuration {
         , lambda(constants::lambda)
 
         , weighted(false)
+        , masked_superstring(false)
         , verbose(true)
 
         , tmp_dirname(constants::default_tmp_dirname)
@@ -174,6 +175,7 @@ struct build_configuration {
     double lambda;  // drive PTHash trade-off
 
     bool weighted;
+    bool masked_superstring;
     bool verbose;
 
     std::string tmp_dirname;
@@ -186,6 +188,7 @@ struct build_configuration {
                   << ", ram_limit_in_GiB = " << ram_limit_in_GiB              //
                   << ", lambda = " << lambda                                  //
                   << ", weighted = " << (weighted ? "true" : "false")         //
+                  << ", masked_superstring = " << (masked_superstring ? "true" : "false")  //
                   << ", verbose = " << (verbose ? "true" : "false")           //
                   << ", tmp_dirname = '" << tmp_dirname << "'" << std::endl;  //
     }

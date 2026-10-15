@@ -10,19 +10,19 @@ struct spectrum_preserving_string_set  //
     /* Return where the string begins and ends in `strings`. */
     std::pair<uint64_t, uint64_t>  // [begin, end)
     string_offsets(const uint64_t string_id) const {
-        uint64_t begin = strings_offsets.access(string_id);
-        uint64_t end = strings_offsets.access(string_id + 1);
+        uint64_t begin = strings_offsets.string_begin(string_id);
+        uint64_t end = strings_offsets.string_end(string_id);
         assert(end > begin);
         return {begin, end};
     }
 
     Kmer string_prefix(const uint64_t string_id) const {
-        uint64_t string_begin = strings_offsets.access(string_id);
+        uint64_t string_begin = strings_offsets.string_begin(string_id);
         return util::read_kmer_at<Kmer>(strings, k - 1, Kmer::bits_per_char * string_begin);
     }
 
     Kmer string_suffix(const uint64_t string_id) const {
-        uint64_t string_end = strings_offsets.access(string_id + 1);
+        uint64_t string_end = strings_offsets.string_end(string_id);
         return util::read_kmer_at<Kmer>(strings, k - 1, Kmer::bits_per_char * (string_end - k + 1));
     }
 
@@ -133,11 +133,12 @@ struct spectrum_preserving_string_set  //
             , k(k)
             , m_it(ptr->strings, k)  //
         {
-            auto [pos, val] = m_ptr->strings_offsets.id_to_offset(m_begin_kmer_id, k);
-            m_offset = val;
-            m_strings_offsets_it = m_ptr->strings_offsets.get_iterator_at(pos);
-            assert(m_strings_offsets_it.value() > m_offset);
-            next_piece();
+            auto [string_id, offset] = m_ptr->strings_offsets.id_to_offset(m_begin_kmer_id, k);
+            m_string_id = string_id;
+            m_offset = offset;
+            m_next_offset = m_ptr->strings_offsets.string_end(m_string_id);
+            assert(m_next_offset > m_offset);
+            begin_piece();
         }
 
         bool has_next() const { return m_begin_kmer_id != m_end_kmer_id; }
@@ -145,8 +146,13 @@ struct spectrum_preserving_string_set  //
         std::pair<uint64_t, Kmer>  // (kmer-id, encoded kmer)
         next() {
             if (m_offset == m_next_offset - k + 1) {
-                m_offset = m_next_offset;
-                next_piece();
+                /* move to the next string, whose begin can precede the end of
+                   the current one when strings are overlapping intervals */
+                m_string_id += 1;
+                m_offset = m_ptr->strings_offsets.string_begin(m_string_id);
+                m_next_offset = m_ptr->strings_offsets.string_end(m_string_id);
+                assert(m_next_offset > m_offset);
+                begin_piece();
             }
             m_ret.first = m_begin_kmer_id;
             if (m_clear) {
@@ -168,17 +174,14 @@ struct spectrum_preserving_string_set  //
         spectrum_preserving_string_set const* m_ptr;
         uint64_t m_begin_kmer_id, m_end_kmer_id;
         uint64_t k;
+        uint64_t m_string_id;
         uint64_t m_offset, m_next_offset;
         kmer_iterator<Kmer, bits::bit_vector> m_it;
-        typename Offsets::iterator m_strings_offsets_it;
         bool m_clear;
 
-        void next_piece() {
+        void begin_piece() {
             m_it.at(Kmer::bits_per_char * m_offset);
-            m_next_offset = m_strings_offsets_it.value();
-            assert(m_next_offset > m_offset);
             m_clear = true;
-            m_strings_offsets_it.next();
         }
     };
 
@@ -255,13 +258,18 @@ private:
             read_kmer == kmer_rc ? constants::backward_orientation : constants::forward_orientation;
 
         if (res.kmer_offset >= res.string_begin and res.kmer_offset < res.string_end - k + 1) {
-            res.kmer_id = res.kmer_offset - res.string_id * (k - 1);     // absolute kmer id
-            res.kmer_id_in_string = res.kmer_offset - res.string_begin;  // relative kmer id
-        } else {
-            strings_offsets.offset_to_id(res, p, k);
+            strings_offsets.set_ids(res, k);
+            return true;
         }
 
-        if (res.kmer_offset < res.string_end - k + 1) return true;
+        strings_offsets.offset_to_id(res, p, k);
+
+        /* The kmer must be fully contained in the located string: the begin
+           check matters when strings are overlapping intervals of one text,
+           where a kmer can also lie in no string at all. */
+        if (res.kmer_offset >= res.string_begin and res.kmer_offset < res.string_end - k + 1) {
+            return true;
+        }
         return false;
     }
 };

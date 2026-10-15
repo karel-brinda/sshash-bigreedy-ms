@@ -245,11 +245,12 @@ private:
     }
 
     void begin_extension() {
-        uint64_t kmer_offset = 2 * (m_res.kmer_id + m_res.string_id * (m_k - 1));
+        uint64_t kmer_offset =
+            kmer_t::bits_per_char * (m_res.string_begin + m_res.kmer_id_in_string);
         m_remaining_string_bases =
             (m_res.string_end - m_res.string_begin - m_k) - m_res.kmer_id_in_string;
         if (m_res.kmer_orientation == constants::backward_orientation) {
-            kmer_offset += 2 * m_k;
+            kmer_offset += kmer_t::bits_per_char * m_k;
             m_remaining_string_bases = m_res.kmer_id_in_string;
         }
         m_it.at(kmer_offset);

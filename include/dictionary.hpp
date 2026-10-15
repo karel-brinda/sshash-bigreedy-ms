@@ -121,7 +121,7 @@ struct dictionary  //
         uint64_t string_length = end - begin;  // in bases
         assert(string_length >= m_k);
         uint64_t string_size = string_length - m_k + 1;  // in kmers
-        uint64_t begin_kmer_id = begin - string_id * (m_k - 1);
+        uint64_t begin_kmer_id = m_spss.strings_offsets.first_kmer_id(string_id, m_k);
         uint64_t end_kmer_id = begin_kmer_id + string_size;
         return iterator(this, begin_kmer_id, end_kmer_id);
     }

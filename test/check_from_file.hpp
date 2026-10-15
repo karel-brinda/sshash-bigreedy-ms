@@ -3,6 +3,7 @@
 #include <algorithm>  // for std::transform
 
 #include "external/gz/zip_stream.hpp"
+#include "include/masked_superstring.hpp"
 
 namespace sshash {
 
@@ -346,6 +347,114 @@ bool check_correctness_weights(Dict const& dict, std::string const& filename) {
         good = check_correctness_weights(zis, dict);
     } else {
         good = check_correctness_weights(is, dict);
+    }
+    is.close();
+    return good;
+}
+
+/*
+   The input file must be the masked superstring the index was built from,
+   with a min-one mask: each represented kmer then has exactly one uppercase
+   occurrence, and kmer-ids are the ranks of the uppercase positions taken
+   in text order.
+*/
+template <typename Dict>
+bool check_correctness_lookup_access_masked_superstring(std::istream& is, Dict const& dict)  //
+{
+    using kmer_t = typename Dict::kmer_type;
+    const uint64_t k = dict.k();
+
+    std::string sequence = read_masked_superstring<kmer_t>(is);
+    auto intervals = masked_superstring_intervals(sequence, k);
+
+    std::cout << "checking correctness of lookup and access over the masked superstring..."
+              << std::endl;
+
+    uint64_t expected_kmer_id = 0;
+    uint64_t string_id = 0;
+    std::string got_kmer_str(k, 0);
+
+    for (auto interval : intervals) {
+        for (uint64_t pos = interval.begin; pos + k <= interval.end; ++pos, ++expected_kmer_id) {
+            if (expected_kmer_id != 0 and expected_kmer_id % 5'000'000 == 0) {
+                std::cout << "checked " << expected_kmer_id << " kmers" << std::endl;
+            }
+
+            kmer_t uint_kmer = util::string_to_uint_kmer<kmer_t>(sequence.data() + pos, k);
+            kmer_t queried = uint_kmer;
+            if constexpr (kmer_t::has_reverse_complement) {
+                /* transform 50% of the queries into their reverse complements */
+                if (expected_kmer_id & 1) queried.reverse_complement_inplace(k);
+            }
+
+            auto res = dict.lookup(queried);
+
+            if (res.kmer_id != expected_kmer_id) {
+                std::cout << "ERROR: expected kmer_id " << expected_kmer_id << " but got "
+                          << res.kmer_id << " (at position " << pos << ")" << std::endl;
+                return false;
+            }
+            if (res.string_id != string_id) {
+                std::cout << "ERROR: expected string_id " << string_id << " but got "
+                          << res.string_id << std::endl;
+                return false;
+            }
+            if (res.kmer_id_in_string != pos - interval.begin) {
+                std::cout << "ERROR: expected kmer_id_in_string " << pos - interval.begin
+                          << " but got " << res.kmer_id_in_string << std::endl;
+                return false;
+            }
+            if (res.string_begin != interval.begin or res.string_end != interval.end) {
+                std::cout << "ERROR: expected string [" << interval.begin << "," << interval.end
+                          << ") but got [" << res.string_begin << "," << res.string_end << ")"
+                          << std::endl;
+                return false;
+            }
+            if (res.kmer_offset != pos) {
+                std::cout << "ERROR: expected kmer_offset " << pos << " but got "
+                          << res.kmer_offset << std::endl;
+                return false;
+            }
+
+            dict.access(res.kmer_id, got_kmer_str.data());
+            kmer_t accessed = util::string_to_uint_kmer<kmer_t>(got_kmer_str.c_str(), k);
+            if (!(accessed == uint_kmer)) {
+                std::cout << "ERROR: accessed kmer '" << got_kmer_str << "' at id "
+                          << res.kmer_id << " does not match the kmer at position " << pos
+                          << std::endl;
+                return false;
+            }
+        }
+        ++string_id;
+    }
+
+    if (expected_kmer_id != dict.num_kmers()) {
+        std::cout << "ERROR: checked " << expected_kmer_id << " kmers but the dictionary has "
+                  << dict.num_kmers() << std::endl;
+        return false;
+    }
+
+    std::cout << "checked " << expected_kmer_id << " kmers" << std::endl;
+    std::cout << "EVERYTHING OK!" << std::endl;
+
+    return check_correctness_negative_lookup(dict);
+}
+
+/*
+   The input file must be the one the index was built from.
+*/
+template <typename Dict>
+bool check_correctness_lookup_access_masked_superstring(Dict const& dict,
+                                                        std::string const& filename)  //
+{
+    std::ifstream is(filename.c_str());
+    if (!is.good()) throw std::runtime_error("error in opening the file '" + filename + "'");
+    bool good = true;
+    if (util::ends_with(filename, ".gz")) {
+        zip_istream zis(is);
+        good = check_correctness_lookup_access_masked_superstring(zis, dict);
+    } else {
+        good = check_correctness_lookup_access_masked_superstring(is, dict);
     }
     is.close();
     return good;
