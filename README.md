@@ -1,3 +1,47 @@
+# SSHash-v3-BiGreedy-MS — SSHash v3 for BiGreedy masked superstrings
+
+> [!IMPORTANT]
+> **This branch (`v3-ms` of [karel-brinda/sshash-bigreedy-ms](https://github.com/karel-brinda/sshash-bigreedy-ms))
+> is [SSHash](https://github.com/jermp/sshash) v3.0.0, the 2022 SSHash design of the Bioinformatics paper (super-k-mer offsets), extended to natively index
+> [masked superstrings](https://doi.org/10.1101/2023.02.01.526717) computed by BiGreedy, as
+> output by [KmerCamel](https://github.com/ondrejsladky/kmercamel).** The `master` branch
+> carries the same feature for the current SSHash.
+>
+> * **New input format.** `--masked-superstring` indexes one KmerCamel-style masked superstring:
+>   a single unwrapped FASTA record over `ACGTacgt`, where an uppercase base marks the start of
+>   a represented k-mer and a lowercase base an unrepresented one:
+>
+>       kmercamel compute -k 31 -o out.msfa input.fa
+>       ./build out.msfa 31 16 --canonical-parsing --masked-superstring --check -o out.sshash
+>
+>   Only the represented k-mers are indexed, with the full dictionary interface (lookup with
+>   unique k-mer ids, access, iteration, streaming and navigational queries).
+> * **The mask must be min-one: every represented k-mer has exactly one uppercase occurrence.**
+>   This is what makes the k-mer ↔ id bijection well defined. Min-one is the default mask of
+>   `kmercamel compute`; other masks — e.g., max-one (`kmercamel maskopt -t max-one`), matchtig
+>   input (`kmercamel compute -S`), or concatenations of masked superstrings sharing k-mers —
+>   are **not supported and not detected during construction**. When the mask provenance is
+>   uncertain, always pass `--check`, which fails on any non-min-one mask.
+> * **Plain SPSS inputs** (unitigs, simplitigs; one sequence per line) are indexed exactly as
+>   upstream: the only addition to the index is an empty sequence. `--weighted` is not supported
+>   with `--masked-superstring`. **Index files are not interchangeable with the base SSHash.**
+> * **Design.** The superstring is stored once, and the maximal intervals of represented k-mers
+>   (which may overlap by less than k−1 bases) play the role of SSHash's strings: their ends are
+>   stored where upstream stores the string endpoints, plus one Elias–Fano sequence of
+>   cumulative k-mer counts, from which the interval begins and the k-mer ids (the ranks of the
+>   uppercase positions) are derived. Minimizer offsets stay absolute: a super-k-mer, and every
+>   k-mer occurrence, lies in at most one interval, namely the one with the smallest end
+>   ≥ offset + k.
+> * **Build fixes for macOS/ARM** (not specific to masked superstrings): PTHash bumped to
+>   `5da0377` (its non-x86 fallbacks), single-threaded PTHash with a fixed seed (as in
+>   sshash-lite-bigreedy-ms), and C++20.
+> * Like upstream v3, construction can fail with *"Empty bucket detected: try a different choice
+>   of l or change seed"*; this happens for plain SPSS inputs too. Pass another `-s` seed.
+
+---
+
+*What follows is the original SSHash v3.0.0 documentation.*
+
 [![Language grade: C/C++](https://img.shields.io/lgtm/grade/cpp/g/jermp/sshash.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/jermp/sshash/context:cpp)
 
 
