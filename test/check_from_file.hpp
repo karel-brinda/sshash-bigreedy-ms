@@ -344,7 +344,7 @@ bool check_correctness_weights(dictionary<kmer_t> const& dict, std::string const
 
 /*
     Masked-superstring input (port of check_correctness_lookup_access_masked_superstring of
-    12_sshash-bigreedy-ms, via 14_sshash-v3-bigreedy-ms). K-mer ids must be the ranks of the
+    sshash-bigreedy-ms, master branch, via its v3-ms branch). K-mer ids must be the ranks of the
     uppercase positions in text order: this is what detects masks that are not min-one, which
     construction does not detect (a k-mer represented twice gets one id only). Also checked:
     lookup_advanced (contig = interval), access, and that every k-mer starting at a lowercase
