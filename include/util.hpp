@@ -108,6 +108,7 @@ struct build_configuration {
 
         , canonical_parsing(false)
         , weighted(false)
+        , masked_superstring(false)
         , verbose(true)
 
         , tmp_dirname(constants::default_tmp_dirname) {}
@@ -121,6 +122,7 @@ struct build_configuration {
 
     bool canonical_parsing;
     bool weighted;
+    bool masked_superstring;  // input is a masked superstring (see builder/masked_superstring.hpp)
     bool verbose;
 
     std::string tmp_dirname;
@@ -129,7 +131,9 @@ struct build_configuration {
         std::cout << "k = " << k << ", m = " << m << ", seed = " << seed << ", l = " << l
                   << ", c = " << c
                   << ", canonical_parsing = " << (canonical_parsing ? "true" : "false")
-                  << ", weighted = " << (weighted ? "true" : "false") << std::endl;
+                  << ", weighted = " << (weighted ? "true" : "false")
+                  << ", masked_superstring = " << (masked_superstring ? "true" : "false")
+                  << std::endl;
     }
 };
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "file_merging_iterator.hpp"
+#include "masked_superstring.hpp"
 
 namespace sshash {
 
@@ -27,6 +28,42 @@ void expect(char got, char expected) {
 
 struct compact_string_pool {
     compact_string_pool() {}
+
+    /* Masked superstring: the superstring is stored once, as is (the 2-bit encoding is
+       case-insensitive), and the strings are its intervals of represented k-mers, which may
+       overlap. pieces = [0, e_0, ..., e_{p-1}] holds the interval ends and cum = [0, c_1, ..., c_p]
+       the cumulative numbers of k-mers (see buckets.hpp). */
+    void build_from_masked_superstring(std::string const& superstring,
+                                       std::vector<embedding_interval> const& intervals,
+                                       uint64_t num_super_kmers, uint64_t k) {
+        assert(!intervals.empty());
+        if (intervals.size() >= 1ULL << 32) {
+            throw std::runtime_error("num_contigs must be less than 2^32");
+        }
+        pthash::bit_vector_builder bvb_strings;
+        for (char c : superstring) bvb_strings.append_bits(util::char_to_uint64(c), 2);
+        /* Push a final sentinel (dummy) symbol to avoid bounds' checking. */
+        bvb_strings.append_bits(0, 2);
+        strings.build(&bvb_strings);
+
+        pieces.clear();
+        cum.clear();
+        pieces.reserve(intervals.size() + 1);
+        cum.reserve(intervals.size() + 1);
+        pieces.push_back(0);
+        cum.push_back(0);
+        for (auto const& interval : intervals) {
+            uint64_t length = interval.end - interval.begin;
+            assert(length >= k);
+            if (length >= 1ULL << 32) {
+                throw std::runtime_error("contig_length " + std::to_string(length) +
+                                         " does not fit into 32 bits");
+            }
+            pieces.push_back(interval.end);
+            cum.push_back(cum.back() + length - k + 1);
+        }
+        m_num_super_kmers = num_super_kmers;
+    }
 
     struct builder {
         builder(uint64_t k) : k(k), offset(0), num_super_kmers(0) {}
@@ -92,6 +129,7 @@ struct compact_string_pool {
     uint64_t num_super_kmers() const { return m_num_super_kmers; }
 
     std::vector<uint64_t> pieces;
+    std::vector<uint64_t> cum;  // empty unless the input is a masked superstring
     pthash::bit_vector strings;
 
 private:

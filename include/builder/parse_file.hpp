@@ -203,6 +203,80 @@ void parse_file(std::istream& is, parse_data& data, build_configuration const& b
     }
 }
 
+/* Masked-superstring input: port of parse_bigreedy_intervals() of 11_sshash-lite-bigreedy-ms.
+   Super-k-mers are parsed per interval, exactly as parse_file() parses each sequence, but their
+   offsets are absolute positions in the superstring, which is stored once (no glueing). */
+void parse_masked_superstring(std::istream& is, parse_data& data,
+                              build_configuration const& build_config) {
+    uint64_t k = build_config.k;
+    uint64_t m = build_config.m;
+    uint64_t seed = build_config.seed;
+    uint64_t max_num_kmers_in_super_kmer = k - m + 1;
+
+    if (max_num_kmers_in_super_kmer >= (1ULL << (sizeof(num_kmers_in_super_kmer_uint_type) * 8))) {
+        throw std::runtime_error(
+            "max_num_kmers_in_super_kmer " + std::to_string(max_num_kmers_in_super_kmer) +
+            " does not fit into " + std::to_string(sizeof(num_kmers_in_super_kmer_uint_type) * 8) +
+            " bits");
+    }
+
+    std::string superstring = read_masked_superstring(is);
+    auto intervals = masked_superstring_intervals(superstring, k);
+    uint64_t num_super_kmers = 0;
+
+    for (auto const& interval : intervals) {
+        uint64_t begin = 0;  // begin of parsed super_kmer in interval
+        uint64_t end = 0;    // end of parsed super_kmer in interval
+        uint64_t interval_size = interval.end - interval.begin;
+        uint64_t prev_minimizer = constants::invalid_uint64;
+
+        auto append_super_kmer = [&]() {
+            if (prev_minimizer == constants::invalid_uint64 or begin == end) return;
+            /* if num_kmers_in_super_kmer > k - m + 1, then split the super_kmer into blocks */
+            uint64_t num_kmers_in_super_kmer = end - begin;
+            for (uint64_t block_begin = 0; block_begin < num_kmers_in_super_kmer;
+                 block_begin += max_num_kmers_in_super_kmer) {
+                uint64_t num_kmers_in_block = std::min<uint64_t>(
+                    max_num_kmers_in_super_kmer, num_kmers_in_super_kmer - block_begin);
+                data.minimizers.emplace_back(prev_minimizer, interval.begin + begin + block_begin,
+                                             num_kmers_in_block);
+                ++num_super_kmers;
+            }
+        };
+
+        while (end != interval_size - k + 1) {
+            char const* kmer = superstring.data() + interval.begin + end;
+            uint64_t uint64_kmer = util::string_to_uint64_no_reverse(kmer, k);
+            uint64_t minimizer = util::compute_minimizer(uint64_kmer, k, m, seed);
+            if (build_config.canonical_parsing) {
+                uint64_t uint64_kmer_rc = util::compute_reverse_complement(uint64_kmer, k);
+                uint64_t minimizer_rc = util::compute_minimizer(uint64_kmer_rc, k, m, seed);
+                minimizer = std::min<uint64_t>(minimizer, minimizer_rc);
+            }
+
+            if (prev_minimizer == constants::invalid_uint64) prev_minimizer = minimizer;
+            if (minimizer != prev_minimizer) {
+                append_super_kmer();
+                begin = end;
+                prev_minimizer = minimizer;
+            }
+            ++data.num_kmers;
+            ++end;
+        }
+        append_super_kmer();
+    }
+
+    data.minimizers.finalize();
+    data.strings.build_from_masked_superstring(superstring, intervals, num_super_kmers, k);
+
+    std::cout << "read masked superstring with " << superstring.size() << " bases and "
+              << intervals.size() << " intervals, " << data.num_kmers << " kmers" << std::endl;
+    std::cout << "num_kmers " << data.num_kmers << std::endl;
+    std::cout << "num_super_kmers " << data.strings.num_super_kmers() << std::endl;
+    std::cout << "num_pieces " << data.strings.pieces.size() << std::endl;
+    assert(data.strings.cum.back() == data.num_kmers);
+}
+
 parse_data parse_file(std::string const& filename, build_configuration const& build_config) {
     std::ifstream is(filename.c_str());
     if (!is.good()) throw std::runtime_error("error in opening the file '" + filename + "'");
@@ -210,9 +284,17 @@ parse_data parse_file(std::string const& filename, build_configuration const& bu
     parse_data data(build_config.tmp_dirname);
     if (util::ends_with(filename, ".gz")) {
         zip_istream zis(is);
-        parse_file(zis, data, build_config);
+        if (build_config.masked_superstring) {
+            parse_masked_superstring(zis, data, build_config);
+        } else {
+            parse_file(zis, data, build_config);
+        }
     } else {
-        parse_file(is, data, build_config);
+        if (build_config.masked_superstring) {
+            parse_masked_superstring(is, data, build_config);
+        } else {
+            parse_file(is, data, build_config);
+        }
     }
     is.close();
     return data;

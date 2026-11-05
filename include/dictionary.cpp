@@ -101,7 +101,7 @@ uint64_t dictionary::weight(uint64_t kmer_id) const {
 
 uint64_t dictionary::contig_size(uint64_t contig_id) const {
     assert(contig_id < num_contigs());
-    uint64_t contig_length = m_buckets.contig_length(contig_id);
+    uint64_t contig_length = m_buckets.contig_length(contig_id, m_k);
     assert(contig_length >= m_k);
     return contig_length - m_k + 1;
 }

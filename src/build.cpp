@@ -46,6 +46,12 @@ int main(int argc, char** argv) {
                "trade-off between index space and lookup time.",
                "--canonical-parsing", true);
     parser.add("weighted", "Also store the weights in compressed format.", "--weighted", true);
+    parser.add("masked_superstring",
+               "The input is a masked superstring: one unwrapped FASTA record over ACGTacgt, where "
+               "uppercase bases mark the starts of the represented kmers (e.g., the output of "
+               "KmerCamel). The mask must be min-one (each kmer represented once): use --check if "
+               "unsure.",
+               "--masked-superstring", true);
     parser.add("check", "Check correctness after construction.", "--check", true);
     parser.add("bench", "Run benchmark after construction.", "--bench", true);
     parser.add("verbose", "Verbose output during construction.", "--verbose", true);
@@ -67,6 +73,7 @@ int main(int argc, char** argv) {
     if (parser.parsed("c")) build_config.c = parser.get<double>("c");
     build_config.canonical_parsing = parser.get<bool>("canonical_parsing");
     build_config.weighted = parser.get<bool>("weighted");
+    build_config.masked_superstring = parser.get<bool>("masked_superstring");
     build_config.verbose = parser.get<bool>("verbose");
     if (parser.parsed("tmp_dirname")) {
         build_config.tmp_dirname = parser.get<std::string>("tmp_dirname");
@@ -79,11 +86,18 @@ int main(int argc, char** argv) {
 
     bool check = parser.get<bool>("check");
     if (check) {
-        check_correctness_lookup_access(dict, input_filename);
-        check_correctness_navigational_kmer_query(dict, input_filename);
-        check_correctness_navigational_contig_query(dict);
-        if (build_config.weighted) check_correctness_weights(dict, input_filename);
-        check_correctness_iterator(dict);
+        if (build_config.masked_superstring) {
+            bool good = check_correctness_lookup_access_masked_superstring(dict, input_filename) and
+                        check_correctness_navigational_contig_query(dict) and
+                        check_correctness_iterator(dict);
+            if (!good) return 1;
+        } else {
+            check_correctness_lookup_access(dict, input_filename);
+            check_correctness_navigational_kmer_query(dict, input_filename);
+            check_correctness_navigational_contig_query(dict);
+            if (build_config.weighted) check_correctness_weights(dict, input_filename);
+            check_correctness_iterator(dict);
+        }
     }
     bool bench = parser.get<bool>("bench");
     if (bench) {

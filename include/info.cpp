@@ -31,6 +31,8 @@ void dictionary::print_space_breakdown() const {
               << " [bits/kmer]\n";
     std::cout << "  pieces: " << static_cast<double>(m_buckets.pieces.num_bits()) / size()
               << " [bits/kmer]\n";
+    std::cout << "  cum: " << static_cast<double>(m_buckets.cum.num_bits()) / size()
+              << " [bits/kmer]\n";
     std::cout << "  num_super_kmers_before_bucket: "
               << static_cast<double>(m_buckets.num_super_kmers_before_bucket.num_bits()) / size()
               << " [bits/kmer]\n";

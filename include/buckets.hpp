@@ -6,8 +6,36 @@
 
 namespace sshash {
 
+/*
+    Strings layout.
+
+    SPSS input (as in SSHash v3): the strings are concatenated; pieces = [0, e_0, ..., e_{p-1}]
+    holds their endpoints, so string i is [pieces[i], pieces[i+1]), and the k-mer at offset x of
+    string i has id x - i * (k - 1). cum is empty.
+
+    Masked-superstring input: the superstring is stored once and the strings are its maximal
+    intervals [b_i, e_i) of represented k-mers (see builder/masked_superstring.hpp), which are
+    sorted and may overlap by less than k - 1 bases. pieces = [0, e_0, ..., e_{p-1}] holds their
+    ends, and cum = [0, c_1, ..., c_p] their cumulative numbers of k-mers, so that
+        b_i = e_i - (k - 1) - (c_{i+1} - c_i)
+    and the k-mer at offset x of interval i has id c_i + (x - b_i), i.e., ids are the ranks of the
+    uppercase positions of the superstring. Since a super-k-mer lies in the interval that generated
+    it, and every k-mer occurrence lies in at most one interval, the interval of a super-k-mer
+    starting at offset x is the one with the smallest end >= x + k.
+*/
 struct buckets {
+    bool masked_superstring() const { return cum.size() != 0; }
+
+    /* Masked superstring only: [begin, end) and number of k-mers of interval i. */
+    std::tuple<uint64_t, uint64_t, uint64_t> interval(uint64_t i, uint64_t k) const {
+        assert(masked_superstring());
+        uint64_t end = pieces.access(i + 1);
+        uint64_t num_kmers = cum.access(i + 1) - cum.access(i);
+        return {end - (k - 1) - num_kmers, end, num_kmers};
+    }
+
     std::pair<lookup_result, uint64_t> offset_to_id(uint64_t offset, uint64_t k) const {
+        if (masked_superstring()) return offset_to_id_masked_superstring(offset, k);
         auto [pos, contig_begin, contig_end] = pieces.locate(offset);
 
         /* The following two facts hold. */
@@ -44,13 +72,35 @@ struct buckets {
         return {res, contig_end};
     }
 
-    uint64_t contig_length(uint64_t contig_id) const {
+    std::pair<lookup_result, uint64_t> offset_to_id_masked_superstring(uint64_t offset,
+                                                                       uint64_t k) const {
+        auto [pos, contig_end] = pieces.next_geq(offset + k);
+        assert(pos > 0 and pos < pieces.size());
+        assert(contig_end >= offset + k);
+        uint64_t contig_id = pos - 1;
+        uint64_t first_kmer_id = cum.access(contig_id);
+        uint64_t contig_size = cum.access(contig_id + 1) - first_kmer_id;
+        uint64_t contig_begin = contig_end - (k - 1) - contig_size;
+        assert(contig_begin <= offset);
+
+        lookup_result res;
+        res.kmer_id_in_contig = offset - contig_begin;
+        res.kmer_id = first_kmer_id + res.kmer_id_in_contig;
+        res.contig_id = contig_id;
+        res.contig_size = contig_size;
+
+        return {res, contig_end};
+    }
+
+    uint64_t contig_length(uint64_t contig_id, uint64_t k) const {
+        if (masked_superstring()) return cum.access(contig_id + 1) - cum.access(contig_id) + k - 1;
         uint64_t length = pieces.access(contig_id + 1) - pieces.access(contig_id);
         return length;
     }
 
     uint64_t contig_prefix(uint64_t contig_id, uint64_t k) const {
-        uint64_t contig_begin = pieces.access(contig_id);
+        uint64_t contig_begin = masked_superstring() ? std::get<0>(interval(contig_id, k))
+                                                     : pieces.access(contig_id);
         bit_vector_iterator bv_it(strings, 2 * contig_begin);
         return bv_it.read(2 * (k - 1));
     }
@@ -138,6 +188,14 @@ struct buckets {
     }
 
     uint64_t id_to_offset(uint64_t id, uint64_t k) const {
+        if (masked_superstring()) {
+            uint64_t contig_id = cum.prev_leq(id);  // c_i <= id < c_{i+1}
+            assert(contig_id + 1 < cum.size());
+            auto [begin, end, num_kmers] = interval(contig_id, k);
+            (void)end;
+            (void)num_kmers;
+            return begin + (id - cum.access(contig_id));
+        }
         constexpr uint64_t linear_scan_threshold = 8;
         uint64_t lo = 0;
         uint64_t hi = pieces.size() - 1;
@@ -177,10 +235,19 @@ struct buckets {
             : m_buckets(ptr), m_kmer_id(kmer_id), m_k(k), m_num_kmers(num_kmers) {
             bv_it = bit_vector_iterator(m_buckets->strings, -1);
             offset = m_buckets->id_to_offset(m_kmer_id, k);
-            auto [pos, piece_end] = m_buckets->pieces.next_geq(offset);
-            if (piece_end == offset) pos += 1;
-            pieces_it = m_buckets->pieces.at(pos);
-            next_piece();
+            if (m_buckets->masked_superstring()) {
+                /* The interval of the k-mer at offset (see offset_to_id_masked_superstring). */
+                auto [pos, piece_end] = m_buckets->pieces.next_geq(offset + k);
+                (void)piece_end;
+                contig_id = pos - 1;
+                next_offset = piece_end;
+                start_piece();
+            } else {
+                auto [pos, piece_end] = m_buckets->pieces.next_geq(offset);
+                if (piece_end == offset) pos += 1;
+                pieces_it = m_buckets->pieces.at(pos);
+                next_piece();
+            }
             ret.second.resize(k, 0);
         }
 
@@ -188,8 +255,17 @@ struct buckets {
 
         std::pair<uint64_t, std::string> next() {
             if (offset == next_offset - m_k + 1) {
-                offset = next_offset;
-                next_piece();
+                if (m_buckets->masked_superstring()) {
+                    /* Consecutive intervals may overlap: restart at the begin of the next one. */
+                    auto [begin, end, num_kmers] = m_buckets->interval(++contig_id, m_k);
+                    (void)num_kmers;
+                    offset = begin;
+                    next_offset = end;
+                    start_piece();
+                } else {
+                    offset = next_offset;
+                    next_piece();
+                }
             }
 
             while (offset != next_offset - m_k + 1) {
@@ -221,13 +297,19 @@ struct buckets {
         bit_vector_iterator bv_it;
         ef_sequence<true>::iterator pieces_it;
 
+        uint64_t contig_id;  // masked superstring only
+
         uint64_t read_kmer;
         uint64_t last_two_bits;
         bool clear;
 
         void next_piece() {
-            bv_it.at(2 * offset);
             next_offset = pieces_it.next();
+            start_piece();
+        }
+
+        void start_piece() {
+            bv_it.at(2 * offset);
             assert(next_offset > offset);
             read_kmer = bv_it.take(2 * m_k);
             clear = true;
@@ -239,19 +321,21 @@ struct buckets {
     }
 
     uint64_t num_bits() const {
-        return pieces.num_bits() + num_super_kmers_before_bucket.num_bits() +
+        return pieces.num_bits() + cum.num_bits() + num_super_kmers_before_bucket.num_bits() +
                8 * (offsets.bytes() + strings.bytes());
     }
 
     template <typename Visitor>
     void visit(Visitor& visitor) {
         visitor.visit(pieces);
+        visitor.visit(cum);
         visitor.visit(num_super_kmers_before_bucket);
         visitor.visit(offsets);
         visitor.visit(strings);
     }
 
     ef_sequence<true> pieces;
+    ef_sequence<true> cum;  // empty unless the input is a masked superstring
     ef_sequence<false> num_super_kmers_before_bucket;
     pthash::compact_vector offsets;
     pthash::bit_vector strings;

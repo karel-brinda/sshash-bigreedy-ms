@@ -21,6 +21,9 @@ void dictionary::build(std::string const& filename, build_configuration const& b
     }
     if (build_config.m == 0) throw std::runtime_error("m must be > 0");
     if (build_config.m > build_config.k) throw std::runtime_error("m must be < k");
+    if (build_config.masked_superstring and build_config.weighted) {
+        throw std::runtime_error("weights are not supported with a masked superstring");
+    }
     if (build_config.l > constants::max_l) {
         throw std::runtime_error("l must be <= " + std::to_string(constants::max_l));
     }

@@ -226,6 +226,10 @@ buckets_statistics build_index(parse_data& data, minimizers const& m_minimizers,
 
     m_buckets.pieces.encode(data.strings.pieces.begin(), data.strings.pieces.size(),
                             data.strings.pieces.back());
+    if (!data.strings.cum.empty()) {
+        m_buckets.cum.encode(data.strings.cum.begin(), data.strings.cum.size(),
+                             data.strings.cum.back());
+    }
     offsets.build(m_buckets.offsets);
     m_buckets.strings.swap(data.strings.strings);
 
