@@ -143,7 +143,7 @@ uint64_t dictionary<kmer_t>::weight(uint64_t kmer_id) const {
 template <class kmer_t>
 uint64_t dictionary<kmer_t>::contig_size(uint64_t contig_id) const {
     assert(contig_id < num_contigs());
-    auto [begin, end] = m_buckets.contig_offsets(contig_id);
+    auto [begin, end] = m_buckets.contig_offsets(contig_id, m_k);
     uint64_t contig_length = end - begin;
     assert(contig_length >= m_k);
     return contig_length - m_k + 1;

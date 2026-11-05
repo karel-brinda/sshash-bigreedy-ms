@@ -103,7 +103,7 @@ struct dictionary {
 
     std::pair<uint64_t, uint64_t>  // [begin, end)
     contig_offsets(const uint64_t contig_id) const {
-        return m_buckets.contig_offsets(contig_id);
+        return m_buckets.contig_offsets(contig_id, m_k);
     }
 
     iterator at_contig_id(const uint64_t contig_id) const {
@@ -112,12 +112,16 @@ struct dictionary {
         uint64_t contig_length = end - begin;  // in bases
         assert(contig_length >= m_k);
         uint64_t contig_size = contig_length - m_k + 1;  // in kmers
-        uint64_t begin_kmer_id = begin - contig_id * (m_k - 1);
+        uint64_t begin_kmer_id = m_buckets.contig_first_kmer_id(contig_id, m_k);
         uint64_t end_kmer_id = begin_kmer_id + contig_size;
         return iterator(this, begin_kmer_id, end_kmer_id);
     }
 
     bits::bit_vector const& strings() const { return m_buckets.strings; }
+    bool masked_superstring() const { return m_buckets.masked_superstring(); }
+    uint64_t contig_first_kmer_id(const uint64_t contig_id) const {
+        return m_buckets.contig_first_kmer_id(contig_id, m_k);
+    }
 
     uint64_t num_bits() const;
     void print_info() const;

@@ -15,6 +15,9 @@ void dictionary<kmer_t>::build(std::string const& filename,
                                build_configuration const& build_config) {
     /* Validate the build configuration. */
     if (build_config.k == 0) throw std::runtime_error("k must be > 0");
+    if (build_config.masked_superstring and build_config.weighted) {
+        throw std::runtime_error("weights are not supported with a masked superstring");
+    }
     if (build_config.k > kmer_t::max_k) {
         throw std::runtime_error("k must be less <= " + std::to_string(kmer_t::max_k) +
                                  " but got k = " + std::to_string(build_config.k));

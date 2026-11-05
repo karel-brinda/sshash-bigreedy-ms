@@ -7,6 +7,9 @@ namespace sshash {
 template <class kmer_t>
 void dictionary<kmer_t>::compute_statistics() const  //
 {
+    if (m_buckets.masked_superstring()) {
+        throw std::runtime_error("bucket statistics are not supported for a masked superstring");
+    }
     std::cout << "computing bucket statistics..." << std::endl;
 
     const uint64_t num_kmers = size();

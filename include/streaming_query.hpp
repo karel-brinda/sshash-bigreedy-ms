@@ -183,7 +183,7 @@ private:
 
         assert(m_res.minimizer_found == true);
         m_num_searches += 1;
-        uint64_t kmer_offset = 2 * (m_res.kmer_id + m_res.contig_id * (m_k - 1));
+        uint64_t kmer_offset = 2 * m_dict->m_buckets.kmer_offset(m_res, m_k);
         m_remaining_contig_bases = (m_res.contig_size - 1) - m_res.kmer_id_in_contig;
         if (m_res.kmer_orientation == constants::backward_orientation) {
             kmer_offset += 2 * m_k;

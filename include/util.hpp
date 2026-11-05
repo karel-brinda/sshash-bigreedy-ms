@@ -45,6 +45,8 @@ struct lookup_result {
     uint64_t contig_size;
     bool minimizer_found;
 
+    /* SPSS only: for a masked superstring, use buckets::kmer_offset() and
+       buckets::contig_offsets() instead. */
     uint64_t contig_begin(const uint64_t k) const {  //
         return kmer_id + contig_id * (k - 1) - kmer_id_in_contig;
     }
@@ -137,6 +139,7 @@ struct build_configuration {
 
         , canonical(false)
         , weighted(false)
+        , masked_superstring(false)
         , verbose(true)
 
         , tmp_dirname(constants::default_tmp_dirname)
@@ -154,6 +157,7 @@ struct build_configuration {
 
     bool canonical;
     bool weighted;
+    bool masked_superstring;  // input is a masked superstring (see builder/masked_superstring.hpp)
     bool verbose;
 
     std::string tmp_dirname;
@@ -164,6 +168,7 @@ struct build_configuration {
                   << ", ram_limit_in_GiB = " << ram_limit_in_GiB << ", l = " << l
                   << ", lambda = " << lambda << ", canonical = " << (canonical ? "true" : "false")
                   << ", weighted = " << (weighted ? "true" : "false")
+                  << ", masked_superstring = " << (masked_superstring ? "true" : "false")
                   << ", verbose = " << (verbose ? "true" : "false") << std::endl;
     }
 };

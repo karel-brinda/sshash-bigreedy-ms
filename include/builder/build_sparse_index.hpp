@@ -135,6 +135,9 @@ buckets_statistics build_sparse_index(parse_data<kmer_t>& data, buckets<kmer_t>&
 
     timer.start();
     m_buckets.pieces.encode(data.pieces.begin(), data.pieces.size(), data.pieces.back());
+    if (!data.interval_num_kmers.empty()) {
+        m_buckets.cum.encode(data.interval_num_kmers.begin(), data.interval_num_kmers.size());
+    }
     offsets_builder.build(m_buckets.offsets);
     m_buckets.strings.swap(data.strings);
     timer.stop();

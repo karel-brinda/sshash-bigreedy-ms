@@ -2,6 +2,7 @@
 
 #include "external/gz/zip_stream.hpp"
 #include "include/minimizer_iterator.hpp"
+#include "masked_superstring.hpp"
 
 namespace sshash {
 
@@ -15,7 +16,39 @@ struct parse_data {
     std::vector<uint64_t> pieces;
     bits::bit_vector strings;
     weights::builder weights_builder;
+
+    /* Masked superstring only (see buckets.hpp): the begins of the intervals, which pieces does
+       not give since consecutive intervals may overlap, and their numbers of k-mers. */
+    std::vector<uint64_t> interval_begins;
+    std::vector<uint64_t> interval_num_kmers;
 };
+
+/* Masked-superstring input: the superstring is stored once, as is (the 2-bit encoding is
+   case-insensitive), and its intervals of represented k-mers are the strings. pieces holds the
+   interval ends, with a leading 0, as for an SPSS. */
+template <class kmer_t>
+void encode_masked_superstring(std::istream& is, parse_data<kmer_t>& data,
+                               bits::bit_vector::builder& bvb_strings, uint64_t k,
+                               uint64_t& num_sequences, uint64_t& num_bases) {
+    std::string superstring = read_masked_superstring(is);
+    auto intervals = masked_superstring_intervals(superstring, k);
+    /* character by character: the bulk x86 path of parse_file() is not checked on lowercase */
+    for (char c : superstring) {
+        bvb_strings.append_bits(kmer_t::char_to_uint(c), kmer_t::bits_per_char);
+    }
+    data.pieces.push_back(0);
+    for (auto const& interval : intervals) {
+        assert(interval.end - interval.begin >= k);
+        data.pieces.push_back(interval.end);
+        data.interval_begins.push_back(interval.begin);
+        data.interval_num_kmers.push_back(interval.end - interval.begin - k + 1);
+        data.num_kmers += interval.end - interval.begin - k + 1;
+    }
+    num_sequences = intervals.size();
+    num_bases = superstring.size();
+    std::cout << "read masked superstring with " << num_bases << " bases and " << num_sequences
+              << " intervals, " << data.num_kmers << " kmers" << std::endl;
+}
 
 template <class kmer_t, input_file_type fmt>
 void parse_file(std::istream& is, parse_data<kmer_t>& data,
@@ -58,7 +91,11 @@ void parse_file(std::istream& is, parse_data<kmer_t>& data,
     uint64_t weight_value = constants::invalid_uint64;
     uint64_t weight_length = 0;
 
-    while (true)  //
+    if (build_config.masked_superstring) {
+        encode_masked_superstring(is, data, bvb_strings, k, num_sequences, num_bases);
+    }
+
+    while (!build_config.masked_superstring)  //
     {
         if constexpr (fmt == input_file_type::cf_seg) {
             std::getline(is, sequence, '\t');  // skip until and consume '\t'
@@ -168,7 +205,9 @@ void parse_file(std::istream& is, parse_data<kmer_t>& data,
         So pieces will be of size p+1, where p is the number of DNA sequences
         in the input file.
     */
-    data.pieces.push_back(bvb_strings.num_bits() / kmer_t::bits_per_char);
+    if (!build_config.masked_superstring) {
+        data.pieces.push_back(bvb_strings.num_bits() / kmer_t::bits_per_char);
+    }
     assert(data.pieces.front() == 0);
 
     /* Push a final sentinel (dummy) value to avoid bounds' checking in
@@ -251,7 +290,8 @@ void parse_file(std::istream& is, parse_data<kmer_t>& data,
 
             for (uint64_t i = index_begin; i != index_end; ++i)  //
             {
-                const uint64_t begin = data.pieces[i];
+                const uint64_t begin =
+                    build_config.masked_superstring ? data.interval_begins[i] : data.pieces[i];
                 const uint64_t end = data.pieces[i + 1];
                 const uint64_t sequence_len = end - begin;
                 assert(sequence_len >= k);

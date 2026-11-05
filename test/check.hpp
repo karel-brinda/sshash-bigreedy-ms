@@ -119,8 +119,7 @@ bool check_correctness_contig_iterator(dictionary<kmer_t> const& dict) {
     std::cout << "checking correctness of contig iterator..." << std::endl;
     std::string expected_kmer(dict.k(), 0);
     for (uint64_t contig_id = 0; contig_id != dict.num_contigs(); ++contig_id) {
-        auto [begin, _] = dict.contig_offsets(contig_id);
-        uint64_t from_kmer_id = begin - contig_id * (dict.k() - 1);
+        uint64_t from_kmer_id = dict.contig_first_kmer_id(contig_id);
         auto it = dict.at_contig_id(contig_id);
         while (it.has_next()) {
             auto [kmer_id, kmer] = it.next();
