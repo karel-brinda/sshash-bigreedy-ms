@@ -168,11 +168,11 @@ bool check_correctness_lookup_access(std::istream& is, dictionary const& dict) {
 
 /*
     Masked-superstring input (port of check_correctness_lookup_access_masked_superstring of
-    12_sshash-bigreedy-ms). K-mer ids must be the ranks of the uppercase positions in text order:
-    this is what detects masks that are not min-one, which construction does not detect (a k-mer
-    represented twice gets one id only). Also checked: lookup_advanced (contig = interval), access,
-    and that every k-mer starting at a lowercase position is found if and only if it is
-    represented (the junction negatives of the overlapping intervals).
+    sshash-bigreedy-ms, master branch). K-mer ids must be the ranks of the uppercase positions
+    in text order: this is what detects masks that are not min-one, which construction does not
+    detect (a k-mer represented twice gets one id only). Also checked: lookup_advanced (contig =
+    interval), access, and that every k-mer starting at a lowercase position is found if and
+    only if it is represented (the junction negatives of the overlapping intervals).
 */
 bool check_correctness_lookup_access_masked_superstring(std::istream& is,
                                                         dictionary const& dict) {

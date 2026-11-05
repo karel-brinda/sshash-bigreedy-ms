@@ -203,7 +203,7 @@ void parse_file(std::istream& is, parse_data& data, build_configuration const& b
     }
 }
 
-/* Masked-superstring input: port of parse_bigreedy_intervals() of 11_sshash-lite-bigreedy-ms.
+/* Masked-superstring input: port of parse_bigreedy_intervals() of sshash-lite-bigreedy-ms.
    Super-k-mers are parsed per interval, exactly as parse_file() parses each sequence, but their
    offsets are absolute positions in the superstring, which is stored once (no glueing). */
 void parse_masked_superstring(std::istream& is, parse_data& data,

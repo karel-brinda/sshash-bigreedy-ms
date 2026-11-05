@@ -1,7 +1,7 @@
 #pragma once
 
 /*
-    Masked-superstring input, ported from 11_sshash-lite-bigreedy-ms (include/builder/bigreedy_ms.hpp).
+    Masked-superstring input, ported from sshash-lite-bigreedy-ms (include/builder/bigreedy_ms.hpp).
 
     A masked superstring is one unwrapped FASTA record over ACGTacgt: an uppercase base marks the
     start of a represented k-mer. The strings indexed are the maximal intervals [begin, end) whose
